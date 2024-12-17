@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -15,7 +16,6 @@ import org.tensorflow.lite.task.vision.classifier.Classifications
 class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListener {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: ViewModel by viewModels()
-
     private lateinit var imageClassifierHelper: ImageClassifierHelper
 
     private val galleryLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -73,31 +73,18 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
         }
     }
 
-    private fun moveToResult(results: List<Classifications>) {
-        val firstResult = results[0]
-        val bestCategory = firstResult.categories.maxByOrNull { it.score }
+    private fun moveToResult(bestCategory: String, confidence: Float) {
+        val confidenceScore = String.format("%.2f", confidence * 100)
 
-        if (bestCategory != null) {
-            val resultText = if (bestCategory.label.contains("cancer", true)) {
-                "Gambar terdeteksi sebagai kanker."
-            } else {
-                "Gambar tidak terdeteksi sebagai kanker."
+        val intent = Intent(this, ResultActivity::class.java).apply {
+            putExtra("RESULT_TEXT", "Hasil Analisis: $bestCategory")
+            putExtra("CONFIDENCE_SCORE", confidenceScore)
+            viewModel.currentimage.value?.let {
+                putExtra("IMAGE_URI", it)
             }
-            val confidenceScore = String.format("%.2f", bestCategory.score * 100)
-
-            val intent = Intent(this, ResultActivity::class.java).apply {
-                putExtra("RESULT_TEXT", resultText)
-                putExtra("CONFIDENCE_SCORE", confidenceScore)
-                viewModel.currentimage.value?.let {
-                    putExtra("IMAGE_URI", it)
-                }
-            }
-            startActivity(intent)
-        } else {
-            showToast("Gagal mendapatkan hasil prediksi.")
         }
+        startActivity(intent)
     }
-
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -117,6 +104,21 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
             showToast("Tidak ada hasil klasifikasi.")
             return
         }
-        moveToResult(results)
+
+        val firstResult = results[0]
+        val categories = firstResult.categories
+
+        val debugResult = StringBuilder("Hasil Klasifikasi:\n")
+        categories.forEach { category ->
+            debugResult.append("${category.label}: ${String.format("%.2f", category.score * 100)}%\n")
+        }
+        Log.d("ClassificationResult", debugResult.toString())
+
+        val bestCategory = categories.maxByOrNull { it.score }
+        if (bestCategory != null) {
+            moveToResult(bestCategory.label, bestCategory.score)
+        } else {
+            showToast("Gagal mendapatkan hasil prediksi.")
+        }
     }
 }
